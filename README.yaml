@@ -1,12 +1,12 @@
-name: Terraform Transit Gateway Module
+name: terraform-module-azurerm-mssql-database
 #logo: logo/logo.jpg
 badges:
   - name: Latest Release
-    image: https://img.shields.io/github/release/<owner/repo>.svg?style=for-the-badge
-    url: https://github.com/<owner/repo>/releases/latest
+    image: https://img.shields.io/github/release/cloudopsworks/terraform-module-azurerm-mssql-database.svg?style=for-the-badge
+    url: https://github.com/cloudopsworks/terraform-module-azurerm-mssql-database/releases/latest
   - name: Last Updated
-    image: https://img.shields.io/github/last-commit/<owner/repo>.svg?style=for-the-badge
-    url: https://github.com/<owner/repo>/commits
+    image: https://img.shields.io/github/last-commit/cloudopsworks/terraform-module-azurerm-mssql-database.svg?style=for-the-badge
+    url: https://github.com/cloudopsworks/terraform-module-azurerm-mssql-database/commits
 
 license: "APACHE2"
 
@@ -15,23 +15,128 @@ copyrights:
     url: "https://cloudopsworks.co"
     year: "2026"
 
-github_repo: <owner/repo>
+github_repo: cloudopsworks/terraform-module-azurerm-mssql-database
 
 description: |-
-  <description>
+  Terraform module that provisions an Azure SQL Server (MSSQL) and databases with Key Vault credential storage and optional Hoop connection output.
 
 # Introduction to the project
 introduction: |-
-#  This is an introduction.
+  This module creates an Azure SQL Server (`azurerm_mssql_server`) along with a default database and optional additional databases (`azurerm_mssql_database`).
+  Credentials are stored as a JSON secret in an existing Azure Key Vault. Firewall rules and VNet rules can be configured through the `network` variable.
+  The module optionally generates Hoop connection definitions for enterprise integrations (community mode returns `null`).
 
 # How to use this project
 usage: |-
+  ```hcl
+  # terragrunt.hcl
+  terraform {
+    source = "git::https://github.com/cloudopsworks/terraform-module-azurerm-mssql-database.git//?ref=v1.0.0"
+  }
+
+  include "root" {
+    path = find_in_parent_folders()
+  }
+
+  inputs = {
+    region = "eastus2"
+
+    key_vault_name                = "my-keyvault"
+    key_vault_resource_group_name = "my-keyvault-rg"
+
+    settings = {
+      name_prefix          = "mydb"          # (Required) Name prefix for the SQL Server resource.
+      version              = "12.0"          # (Optional) SQL Server version. Default: "12.0".
+      administrator_login  = "sqladmin"      # (Optional) Admin username. Default: "sqladmin".
+      minimum_tls_version  = "1.2"           # (Optional) Minimum TLS version: 1.0, 1.1, 1.2, Disabled. Default: 1.2.
+      connection_policy    = "Default"       # (Optional) Default, Proxy, Redirect. Default: Default.
+
+      database = {
+        name            = "appdb"                        # (Optional) Default database name. Default: "master".
+        sku_name        = "S1"                           # (Optional) DTU/vCore SKU. Default: Basic.
+        max_size_gb     = 10                             # (Optional) Max database size in GB. Default: 2.
+        collation       = "SQL_Latin1_General_CP1_CI_AS" # (Optional) Collation. Default: SQL_Latin1_General_CP1_CI_AS.
+        elastic_pool_id = null                           # (Optional) Elastic pool resource ID.
+        zone_redundant  = false                          # (Optional) Zone redundancy. Default: false.
+      }
+
+      databases = {
+        reporting = {
+          name            = "reportingdb"                    # (Required) Database name.
+          sku_name        = "Basic"                          # (Optional) DTU/vCore SKU. Default: Basic.
+          max_size_gb     = 2                                # (Optional) Max database size in GB. Default: 2.
+          collation       = "SQL_Latin1_General_CP1_CI_AS"  # (Optional) Collation. Default: SQL_Latin1_General_CP1_CI_AS.
+          elastic_pool_id = null                             # (Optional) Elastic pool resource ID.
+          zone_redundant  = false                            # (Optional) Zone redundancy. Default: false.
+        }
+      }
+
+      hoop = {
+        enabled        = false  # (Optional) Generate hoop_connections output. Default: false.
+        agent_id       = ""     # (Required when enabled) Hoop agent UUID.
+        community      = true   # (Optional) true=community (null output); false=enterprise. Default: true.
+        import         = false  # (Optional) Import existing Hoop connection. Default: false.
+        tags           = {}     # (Optional) Tags map applied to Hoop connection.
+        access_control = []     # (Optional) Access control groups list.
+      }
+    }
+
+    network = {
+      public_network_access = true  # (Optional) Allow public network access. Default: true.
+      firewall_rules = [
+        {
+          name     = "office"          # (Required) Rule name.
+          start_ip = "203.0.113.0"     # (Required) Start IP address.
+          end_ip   = "203.0.113.255"   # (Required) End IP address.
+        }
+      ]
+      vnet_rules = [
+        {
+          name      = "subnet-rule"                            # (Required) Rule name.
+          subnet_id = "/subscriptions/.../subnets/db-subnet"  # (Required) Subnet resource ID.
+        }
+      ]
+    }
+  }
+  ```
 
 # Example usage
 examples: |-
+  ## Minimal example — Basic SKU, public access
+  ```hcl
+  inputs = {
+    region                        = "eastus2"
+    key_vault_name                = "my-kv"
+    key_vault_resource_group_name = "my-kv-rg"
+    settings = {
+      name_prefix = "myapp"
+    }
+  }
+  ```
+
+  ## Enterprise Hoop integration
+  ```hcl
+  inputs = {
+    region                        = "eastus2"
+    key_vault_name                = "my-kv"
+    key_vault_resource_group_name = "my-kv-rg"
+    settings = {
+      name_prefix = "myapp"
+      hoop = {
+        enabled   = true
+        community = false
+        agent_id  = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      }
+    }
+  }
+  ```
 
 # How to get started quickly
 quickstart: |-
+  1. Run `make init/azurerm` to initialise the module for Azure.
+  2. Copy `.boilerplate/inputs.yaml` to your Terragrunt deployment directory and fill in the required values.
+  3. Run `terragrunt plan` to preview the resources that will be created.
+  4. Run `terragrunt apply` to provision the Azure SQL Server and databases.
 
 include:
   - "docs/targets.md"
